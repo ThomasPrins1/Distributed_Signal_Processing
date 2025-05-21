@@ -47,11 +47,12 @@ def createBoundedPoints(locations,bounds,j): # this creates shapely circles boun
 """ Main Code """
 for j in range(node_max): # Try for number of nodes
     if (covered_area < min_coverage) and (True): # Skip loop if the covered area is good enough
+        print("iteration",j,":")
         # we can also add a condition for being well connected in this statement (replace True part with this)
         # to make sure enough area is covered and everything is connected
         temp = np.zeros([j,2])
         locations = plotNodes(temp,j,area_size)
-        print("iteration",j,":")
+    
         # Create points with radius for area calculations:
         covered_area = createBoundedPoints(locations,box_bounds,j)
         temp2 = covered_area
