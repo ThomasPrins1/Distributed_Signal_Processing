@@ -53,7 +53,7 @@ def createBoundedPoints(locations,bounds,k): # this creates shapely circles boun
 
 
 """ Main Code """
-for j in range(node_max): # Try for number of nodes
+for j in range(2,node_max): # Try for number of nodes
     print("iteration",j,":")
     if (covered_area < min_coverage) or fully_connected == False: # Skip loop if the covered area is good enough
         # we can also add a condition for being well connected in this statement (replace True part with this)
@@ -68,10 +68,11 @@ for j in range(node_max): # Try for number of nodes
         print("Area filed",(covered_area*100),"%")
         adjacency_power = []
         for i in range(j): # this part doesnt exactly work yet actually ...
-            adjacency_power.append(np.linalg.matrix_power(adjacency_matrix,i))
+            adjacency_power.append(np.linalg.matrix_power(adjacency_matrix,i+1))
+            print("non-zeros:",np.count_nonzero(adjacency_power[0:i],axis=0))
             if np.sum(adjacency_matrix[i,:]) > 1 and connection_type == "Connected": # always a self loop! so needs to be bigger then 1
                 fully_connected = True
-            elif np.count_nonzero(adjacency_power[0:i]) == j**2  and connection_type == "Fully_Connected":
+            elif np.sum(np.count_nonzero(adjacency_power[0:i],axis=0)) >= (i+1)**2  and connection_type == "Fully_Connected":
                 fully_connected = True
             else:
                 fully_connected = False
