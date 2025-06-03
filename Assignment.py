@@ -62,16 +62,18 @@ def randomized_gossip(A,input,j):
     weight_matrix[:,0] = weight_matrix[0,:]
     for i in range(1,j):
         toBeNormalised_matrix = ((weight_matrix[i:j,i]/np.sum(weight_matrix[i:j,i]))*(1-np.sum(weight_matrix[0:i-1,i])))
-        print("test:",toBeNormalised_matrix.shape)
-        print(weight_matrix[i-1:-1,i].shape)
-        print(weight_matrix.shape)
-        print(i)
         weight_matrix[i-1:-1,i] = toBeNormalised_matrix
         weight_matrix[i,i-1:-1] = toBeNormalised_matrix.T
-        #weight_matrix[:,i] = np.vstack((weight_matrix[0:i-1,i],toBeNormalised_matrix))
-        #weight_matrix[i,:] = weight_matrix[:,i].T
     out = weight_matrix@input
     return out,weight_matrix
+
+def find_partner(node, adjacent):
+    # I guess we need to find a partner here to combine with node k for an iteration?
+    # get the indexes of adjacent for row k to find which it can connect to.
+    # then choose one of those indexes by random, remember that the amount of connections is kinda random
+    # so this might actually be harder then it sounds lol, maybe keep in mind that node k doesnt send to node k also!
+    # return index to connect to!
+    print("nothing yet")
 
 """ Main Code """
 
@@ -108,13 +110,21 @@ for j in range(1,node_max): # Try for number of nodes
         break
 
 num_nodes = j -1
-x0 = np.random.uniform(low=0, high=20.0, size=num_nodes)
-print(x0.shape)
-weighted_x = np.zeros((num_nodes,num_nodes))
-weighted_x[:,0] = x0
+x0_temp = np.random.uniform(low=0, high=20.0, size=(num_nodes,num_nodes))
+x0 = x0_temp*np.eye(num_nodes)
+x_iterating = x0
+print(x0)
+x_list = []
 for k in range(num_nodes):
     print(adjacency_matrix.shape)
-    weighted_x[:,k],_ = randomized_gossip(adjacency_matrix,weighted_x[:,k-1],num_nodes)
+    connecting_node = find_partner(k,adjacency_matrix) # here we need to use find_partner to find the specific index of node k to place the average in!
+    x_iterating[k],_ = randomized_gossip(adjacency_matrix,x_iterating[k],num_nodes) # weighted values for x[k]?
+    #x_iterating[connecting_node],_ = randomized_gossip(adjacency_matrix,x_iterating[connecting_node],num_nodes) # weighted values for x[connecting node]?
+    # these 2 nodes now both need to set their values to the average: 1/2(x_k+x_connected) (I think?)
+    ### but do they use the same weights or other ones? then is it randomized? or is only the chosen node randomized?
+    # something like this?
+    x_iterating[k],x_iterating[connecting_node] = 1/2*(x_iterating[k] + x_iterating[connecting_node])
+    x_list.append(x_iterating) # x_list can keep track of all values
 # x & y might not be needed tbh:
 x = locations[:,0]
 y = locations[:,1]
