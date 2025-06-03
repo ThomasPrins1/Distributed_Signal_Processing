@@ -119,7 +119,7 @@ for k in range(num_nodes):
     print(adjacency_matrix.shape)
     connecting_node = find_partner(k,adjacency_matrix) # here we need to use find_partner to find the specific index of node k to place the average in!
     x_iterating[k],_ = randomized_gossip(adjacency_matrix,x_iterating[k],num_nodes) # weighted values for x[k]?
-    #x_iterating[connecting_node],_ = randomized_gossip(adjacency_matrix,x_iterating[connecting_node],num_nodes) # weighted values for x[connecting node]?
+    x_iterating[connecting_node],_ = randomized_gossip(adjacency_matrix,x_iterating[connecting_node],num_nodes) # weighted values for x[connecting node]?
     # these 2 nodes now both need to set their values to the average: 1/2(x_k+x_connected) (I think?)
     ### but do they use the same weights or other ones? then is it randomized? or is only the chosen node randomized?
     # something like this?
