@@ -24,7 +24,7 @@ covered_area = 0
 # Dependent variables
 box_bounds = box(0,0,area_size, area_size)
 connection_type = "Proper_Connected"
-
+connected_graph = False
 
 """ Functions """
 def plotNodes(locations,node_max,area_size): # uniformly distributes the location of nodes and returns it.
@@ -119,11 +119,12 @@ for k in range(num_nodes):
     print(adjacency_matrix.shape)
     connecting_node = find_partner(k,adjacency_matrix) # here we need to use find_partner to find the specific index of node k to place the average in!
     x_iterating[k],_ = randomized_gossip(adjacency_matrix,x_iterating[k],num_nodes) # weighted values for x[k]?
-    x_iterating[connecting_node],_ = randomized_gossip(adjacency_matrix,x_iterating[connecting_node],num_nodes) # weighted values for x[connecting node]?
+    #x_iterating[connecting_node],_ = randomized_gossip(adjacency_matrix,x_iterating[connecting_node],num_nodes) # weighted values for x[connecting node]?
+    
     # these 2 nodes now both need to set their values to the average: 1/2(x_k+x_connected) (I think?)
     ### but do they use the same weights or other ones? then is it randomized? or is only the chosen node randomized?
     # something like this?
-    x_iterating[k],x_iterating[connecting_node] = 1/2*(x_iterating[k] + x_iterating[connecting_node])
+    #x_iterating[k],x_iterating[connecting_node] = 1/2*(x_iterating[k] + x_iterating[connecting_node])
     x_list.append(x_iterating) # x_list can keep track of all values
 # x & y might not be needed tbh:
 x = locations[:,0]
