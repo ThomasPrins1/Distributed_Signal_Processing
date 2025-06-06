@@ -10,12 +10,14 @@ import matplotlib.pyplot as plt
 from shapely.geometry import Point
 from shapely.ops import unary_union
 from shapely.geometry import box
+import cvxpy as cp
 np.random.seed(5885221)
 
 
 """ Variables """
 # Tuning variables:
 node_max = 200
+max_iter = 500
 area_size = 100
 radius = 20
 min_coverage = 0.85
@@ -51,7 +53,45 @@ def createBoundedPoints(locations,bounds,k): # this creates shapely circles boun
     covered_area = covered_area.intersection(bounds)
     return covered_area,adjacency_matrix
 
-def randomized_gossip(A,input,j):
+def convex(W_ij_list):
+    n = len(W_ij_list)
+    P = cp.Variable((n,n), nonneg = True)
+    sum_PW = np.zeros((n,n))
+    constraints = []
+    
+    for i in range(n):
+        constraints.append(cp.sum(P[i]) == 1)
+        for j in range(n):
+            sum_PW =  sum_PW + (P[i,j]*W_ij_list[i][j])
+    W_bar = (1/n)*sum_PW
+    constraints.append(W_bar == (1/n)*sum_PW)
+    lambda_max = cp.lambda_max(W_bar-(1/n)*np.ones((n,n)))
+
+    prob = cp.Problem(cp.Minimize(lambda_max), constraints)
+    prob.solve(solver=cp.CVXOPT)
+    print("Solver status:", prob.status)
+    return P.value
+
+def randomized_gossip(A):
+    n = A.shape[1]
+    W_ij_list = []
+    I_mtrx = np.eye(n)
+    for i in range(n):
+        e_i = np.zeros((n,1))
+        e_i[i] = 1
+        temp = []
+        for j in range(n):
+            if A[i,j] == 1 and i!=j:
+                e_j = np.zeros((n,1))
+                e_j[j] = 1
+                W_ij = I_mtrx-(1/2)*(e_i-e_j)*(e_i-e_j).T
+                temp.append(W_ij)
+            else:
+                temp.append(np.zeros((n,n)))
+        W_ij_list.append(temp)
+    P = convex(W_ij_list)
+    return P
+"""""
     #for k in range(j)
         #search index of A matrix to see whos connected
     temp_weights = np.random.uniform(low=0, high=1.0, size=(j,j))
@@ -65,15 +105,17 @@ def randomized_gossip(A,input,j):
         weight_matrix[i-1:-1,i] = toBeNormalised_matrix
         weight_matrix[i,i-1:-1] = toBeNormalised_matrix.T
     out = weight_matrix@input
-    return out,weight_matrix
+"""""
 
-def find_partner(node, adjacent):
-    # I guess we need to find a partner here to combine with node k for an iteration?
-    # get the indexes of adjacent for row k to find which it can connect to.
-    # then choose one of those indexes by random, remember that the amount of connections is kinda random
-    # so this might actually be harder then it sounds lol, maybe keep in mind that node k doesnt send to node k also!
-    # return index to connect to!
-    print("nothing yet")
+def find_partner(P):
+    n = P.shape[1]
+    rng = np.random.default_rng() # this needs to be a random state
+    i = rng.choice(n,1)
+    P[i] = np.maximum(P[i],0)
+    P[i] /= np.sum(P[i])
+    j = rng.choice(n,1,p=P[i][0])
+    print(i,j)
+    return i,j
 
 """ Main Code """
 
@@ -110,26 +152,30 @@ for j in range(1,node_max): # Try for number of nodes
         break
 
 num_nodes = j -1
-x0_temp = np.random.uniform(low=0, high=20.0, size=(num_nodes,num_nodes))
-x0 = x0_temp*np.eye(num_nodes)
+x0 = np.random.uniform(low=0, high=50.0, size=num_nodes)
 x_iterating = x0
 print(x0)
 x_list = []
-for k in range(num_nodes):
-    print(adjacency_matrix.shape)
-    connecting_node = find_partner(k,adjacency_matrix) # here we need to use find_partner to find the specific index of node k to place the average in!
-    x_iterating[k],_ = randomized_gossip(adjacency_matrix,x_iterating[k],num_nodes) # weighted values for x[k]?
+P = randomized_gossip(adjacency_matrix) # weighted values for x[k]?
+
+print(P)
+for k in range(max_iter):
+    #print(adjacency_matrix.shape)
+    i,j = find_partner(P) # here we need to use find_partner to find the specific index of node k to place the average in!
     #x_iterating[connecting_node],_ = randomized_gossip(adjacency_matrix,x_iterating[connecting_node],num_nodes) # weighted values for x[connecting node]?
-    
+    x_mean = (1/2)*(x_iterating[i] + x_iterating[j])
+    print(x_iterating)
+    x_iterating[i] = x_mean
+    x_iterating[j] = x_mean
     # these 2 nodes now both need to set their values to the average: 1/2(x_k+x_connected) (I think?)
     ### but do they use the same weights or other ones? then is it randomized? or is only the chosen node randomized?
     # something like this?
     #x_iterating[k],x_iterating[connecting_node] = 1/2*(x_iterating[k] + x_iterating[connecting_node])
-    x_list.append(x_iterating) # x_list can keep track of all values
+    x_list.append(x_iterating.copy()) # x_list can keep track of all values
 # x & y might not be needed tbh:
 x = locations[:,0]
 y = locations[:,1]
-#adjacency = 
+
 
 
 """ Chatgpt to plot lol """
@@ -160,5 +206,41 @@ plt.title('Clipped and Unioned Coverage Area')
 plt.grid(True)
 plt.show()
 
+x_array = np.array(x_list)  # shape: (iterations+1, num_nodes)
+
+plt.figure(figsize=(10, 6))
+num_nodes = x_array.shape[1]
+
+for i in range(num_nodes):
+    plt.plot(x_array[:, i])
+
+plt.xlabel('Iteration $k$')
+plt.ylabel('Value $x_i[k]$')
+plt.title('Randomized Gossip Convergence Over Time')
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# Compute the average value of the initial state (consensus target)
+x_avg = np.mean(x_array[0])  # constant target value
+errors = []
+
+# Compute squared consensus error at each iteration
+for x_k in x_array:
+    error = np.linalg.norm(x_k - x_avg)**2
+    errors.append(error)
+
+# Plot on semilogy scale (like your reference plot)
+plt.figure(figsize=(10, 6))
+plt.semilogy(errors, label='Randomized Gossip', color='darkorange', linewidth=2)
+
+plt.xlabel('Iteration $k$')
+plt.ylabel(r'$||x(k) - x_{\mathrm{avg}}*1||^2$')
+plt.title('Consensus Error Over Time')
+plt.grid(True, which="both", ls="--")
+plt.legend()
+plt.tight_layout()
+plt.show()
 #plt.scatter(x, y, s=radius, alpha=0.5)
 #plt.show()
