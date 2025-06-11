@@ -53,7 +53,7 @@ def createBoundedPoints(locations,bounds,k): # this creates shapely circles boun
     covered_area = covered_area.intersection(bounds)
     return covered_area,adjacency_matrix
 
-def convex(W_ij_list):
+def convex_RG(W_ij_list):
     n = len(W_ij_list)
     P = cp.Variable((n,n), nonneg = True)
     sum_PW = np.zeros((n,n))
@@ -72,6 +72,19 @@ def convex(W_ij_list):
     print("Solver status:", prob.status)
     return P.value
 
+def convex_PDMM(x,z,n):
+    A = cp.Variable((n,n,num_connections), nonneg = True) # each element needs to be a matrix with dimension that fits: A(i,j)*x(i)
+    b = cp.Variable((n,n), nonneg = True)
+    constraints = []
+    for i in range(n):
+        for j in range(n): # needs to limit to only connected nodes
+            constraints.append(A(i,j)*x(i) + A(j,i)*x(j) == b(i,j))
+            cost = f(i) + sum(z(i,j).T * A(i,j)*x(i) + (c/2)*cp.power(2,(cp.norm(A(i,j)*x(i)-(1/2)*b(i,j)))))
+            # what is f(i) and c?
+    prob = cp.Problem(cp.Minimize(cost), constraints)
+    prob.solve(solver=cp.CVXOPT)
+    print("Solver status:", prob.status)
+
 def randomized_gossip(A):
     n = A.shape[1]
     W_ij_list = []
@@ -89,7 +102,7 @@ def randomized_gossip(A):
             else:
                 temp.append(np.zeros((n,n)))
         W_ij_list.append(temp)
-    P = convex(W_ij_list)
+    P = convex_RG(W_ij_list)
     return P
 """""
     #for k in range(j)
@@ -106,6 +119,26 @@ def randomized_gossip(A):
         weight_matrix[i,i-1:-1] = toBeNormalised_matrix.T
     out = weight_matrix@input
 """""
+def PDMM(k,A): # k is the iteration
+    n = A.shape[1]
+    I_mtrx = np.eye(n)
+    z = np.zeros(2*m,2*m) # m?
+    for i in range(n): # total number of nodes
+        x_i = convex_PDMM(j) # to find the argmin we need a convex solver! j is the connected nodes
+        for j in range(n):
+            if A[i,j] == 1 and i!=j:
+                y(i,j) = z(i,j) + 2*c(A_ij*x(i)-(1/2)b_ij) # A_ij & b_ij?
+    for i in range(n):
+        for j in range(n):
+            if A[i,j] == 1 and i!=j:
+                print("sending!")
+                # transmit variables somehow
+    for i in range(n):
+        for j in range(n):
+            if A[i,j] == 1 and i!=j:
+                # think we update the z value of node j with the y value of node i
+                z(j,i) = y(i,j) #slides say k+1 but since its at the end we can just overwrite it i think
+    return x,y,z
 
 def find_partner(P):
     n = P.shape[1]
