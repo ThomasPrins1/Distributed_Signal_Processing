@@ -119,7 +119,7 @@ def randomized_gossip(A):
         weight_matrix[i,i-1:-1] = toBeNormalised_matrix.T
     out = weight_matrix@input
 """""
-def PDMM(k,A): # k is the iteration
+def PDMM(k,x): # k is the iteration
     n = A.shape[1]
     I_mtrx = np.eye(n)
     z = np.zeros(2*m,2*m) # m?
@@ -127,7 +127,7 @@ def PDMM(k,A): # k is the iteration
         x_i = convex_PDMM(j) # to find the argmin we need a convex solver! j is the connected nodes
         for j in range(n):
             if A[i,j] == 1 and i!=j:
-                y(i,j) = z(i,j) + 2*c(A_ij*x(i)-(1/2)b_ij) # A_ij & b_ij?
+                y(i,j) = z(i,j) + 2*c*(A_ij*x(i)-(1/2)*b_ij) # A_ij & b_ij?
     for i in range(n):
         for j in range(n):
             if A[i,j] == 1 and i!=j:
@@ -184,7 +184,11 @@ for j in range(1,node_max): # Try for number of nodes
     else:
         break
 
+## Randomized gossip:
+
 num_nodes = j -1
+num_vertices = int(sum(sum(np.tril(adjacency_matrix)-np.eye((num_nodes)))))
+
 x0 = np.random.uniform(low=0, high=50.0, size=num_nodes)
 x_iterating = x0
 print(x0)
@@ -210,6 +214,30 @@ x = locations[:,0]
 y = locations[:,1]
 
 
+## PDMM:
+print(num_vertices)
+A_list = []
+B_list = []
+d_list = []
+n = num_nodes
+m = num_vertices
+for i in range(n):
+    A_list_j = []
+    B_list_j = []
+    d_list_j = []
+    for j in range(n):
+        if (adjacency_matrix[i,j] == 1):
+            # we need to add the C matrix here still!
+            A_list_j.append(np.eye(n,m))
+            B_value = np.eye(1,m)
+            B_list_j.append(B_value)
+            d_list_j.append((1/2)*np.array(((B_value.T,B_value.T).T)))
+        else:
+            A_list_j.append(np.zeros((n,m)))
+            B_list_j.append(np.zeros((1,m)))
+    A_list.append(A_list_j)
+    B_list.append(B_list_j)
+    d_list.append(d_list_j)
 
 """ Chatgpt to plot lol """
 from shapely.geometry import MultiPolygon, Polygon
