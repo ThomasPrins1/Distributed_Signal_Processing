@@ -118,7 +118,7 @@ def randomized_gossip(A):
         weight_matrix[i-1:-1,i] = toBeNormalised_matrix
         weight_matrix[i,i-1:-1] = toBeNormalised_matrix.T
     out = weight_matrix@input
-"""""
+
 def PDMM(k,x): # k is the iteration
     n = A.shape[1]
     I_mtrx = np.eye(n)
@@ -139,7 +139,7 @@ def PDMM(k,x): # k is the iteration
                 # think we update the z value of node j with the y value of node i
                 z(j,i) = y(i,j) #slides say k+1 but since its at the end we can just overwrite it i think
     return x,y,z
-
+"""""
 def find_partner(P):
     n = P.shape[1]
     rng = np.random.default_rng() # this needs to be a random state
@@ -187,7 +187,7 @@ for j in range(1,node_max): # Try for number of nodes
 ## Randomized gossip:
 
 num_nodes = j -1
-num_vertices = int(sum(sum(np.tril(adjacency_matrix)-np.eye((num_nodes)))))
+num_edges = int(sum(sum(np.tril(adjacency_matrix)-np.eye((num_nodes)))))
 
 x0 = np.random.uniform(low=0, high=50.0, size=num_nodes)
 x_iterating = x0
@@ -215,29 +215,69 @@ y = locations[:,1]
 
 
 ## PDMM:
-print(num_vertices)
+n = num_nodes
+m = num_edges
+neighbors_list = []
+for i in range(n):
+    neighbors_i = []
+    for j in range(n):
+        if (adjacency_matrix[i,j] == 1):
+            neighbors_i.append(j)
+    neighbors_list.append(neighbors_i)
+
 A_list = []
 B_list = []
 d_list = []
-n = num_nodes
-m = num_vertices
+
+c = 5
 for i in range(n):
     A_list_j = []
     B_list_j = []
     d_list_j = []
     for j in range(n):
-        if (adjacency_matrix[i,j] == 1):
+        if (adjacency_matrix[i,j] == 1 and i>j):
             # we need to add the C matrix here still!
-            A_list_j.append(np.eye(n,m))
-            B_value = np.eye(1,m)
+            A_list_j.append(-1)
+            B_value = np.zeros((m,1))
             B_list_j.append(B_value)
-            d_list_j.append((1/2)*np.array(((B_value.T,B_value.T).T)))
+            d_value = (1/2)*np.vstack((B_value.T,B_value.T))
+            d_list_j.append(d_value)
+        elif (adjacency_matrix[i,j] == 1 and i<j):
+            A_list_j.append(1)
+            B_value = np.zeros((m,1))
+            B_list_j.append(B_value)
+            d_value = (1/2)*np.vstack((B_value,B_value))
+            d_list_j.append(d_value)
         else:
-            A_list_j.append(np.zeros((n,m)))
-            B_list_j.append(np.zeros((1,m)))
+            A_list_j.append(0)
+            B_list_j.append(0)
+            d_list_j.append(np.zeros((1,2*m)))
+    
     A_list.append(A_list_j)
     B_list.append(B_list_j)
     d_list.append(d_list_j)
+
+
+
+print("test")
+print(A_list[i][0])
+a = np.zeros((n,1))
+x_PDMM = np.zeros((n,max_iter+1)) # put x0 as first iteration
+x_PDMM[:,0] = x0
+m = 1
+for i in range(n):
+    a[i] = np.average(adjacency_matrix[i,:]*x0)
+    num_neighbors = int(sum(adjacency_matrix[i,:])-1)
+    z = np.zeros((m,num_neighbors))
+    summation = np.zeros((num_neighbors,m))
+    for time,k in enumerate(range(max_iter)):
+        print(time)
+        for index,j in enumerate(neighbors_list[i]):
+            summation[index] = (A_list[i][j])*z[index]
+        x_PDMM[i,k+1] = (a[i] - np.sum(summation)/(1+c*num_neighbors))
+        for index,j in enumerate(neighbors_list[i]):
+                y = z[:,index] + 2*c*(A_list[i][j]*x[i,k+1])
+                z[:,index] = y
 
 """ Chatgpt to plot lol """
 from shapely.geometry import MultiPolygon, Polygon
