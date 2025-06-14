@@ -150,6 +150,36 @@ def find_partner(P):
     print(i,j)
     return i,j
 
+def createVectors(adjacency,vertices,edges,length_x):
+    # this creates the matrices for A,b,C,d to be used in PDMM
+    # x is length (#nodes,1)
+    # then A has dimensions (#vertices,#nodes)
+    # where A_ij = 
+    # and b has length (x,1)
+    A = []
+    b = []
+    C = []
+    d = []
+    C = 5
+
+    for i in range(n):
+        A_list_j = []
+        b_list_j = []
+        d_list_j = []
+        for j in range(n):
+            if i < j:
+                A_list_j.append(adjacency[i,j]*np.eye(length_x))
+            elif i > j:
+                A_list_j.append(adjacency[i,j]*-1*np.eye(length_x))
+            # think we can skip i=j to remove the diagonal
+            b_value = np.zeros((length_x,1))
+            b_list_j.append(b_value)
+            d_list_j.append((1/2)*np.vstack((b_value.T,b_value.T)))
+        A.append(A_list_j)
+        b.append(b_list_j)
+        d.append(d_list_j)
+    return A,b,C,d
+
 """ Main Code """
 
 for j in range(1,node_max): # Try for number of nodes
@@ -224,11 +254,15 @@ for i in range(n):
         if (adjacency_matrix[i,j] == 1):
             neighbors_i.append(j)
     neighbors_list.append(neighbors_i)
-
+A,b,_,d = createVectors(adjacency_matrix,n,m,x0.ndim)
+print(A)
+print(A[0][0])
+print(b)
+print(b[0])
 A_list = []
 B_list = []
 d_list = []
-
+"""""
 c = 5
 for i in range(n):
     A_list_j = []
@@ -256,11 +290,11 @@ for i in range(n):
     A_list.append(A_list_j)
     B_list.append(B_list_j)
     d_list.append(d_list_j)
-
+"""""
 
 
 print("test")
-print(A_list[i][0])
+c = 5
 a = np.zeros((n,1))
 x_PDMM = np.zeros((n,max_iter+1)) # put x0 as first iteration
 x_PDMM[:,0] = x0
@@ -273,10 +307,10 @@ for i in range(n):
     for time,k in enumerate(range(max_iter)):
         print(time)
         for index,j in enumerate(neighbors_list[i]):
-            summation[index] = (A_list[i][j])*z[index]
+            summation[index] = (A[i][j])*z[index]
         x_PDMM[i,k+1] = (a[i] - np.sum(summation)/(1+c*num_neighbors))
         for index,j in enumerate(neighbors_list[i]):
-                y = z[:,index] + 2*c*(A_list[i][j]*x[i,k+1])
+                y = z[:,index] + 2*c*(A[i][j]*x[i,k+1])
                 z[:,index] = y
 
 """ Chatgpt to plot lol """
