@@ -18,7 +18,7 @@ np.random.seed(5885221)
 # Tuning variables:
 node_max = 200
 max_iter_RG = 500
-max_iter_PDMM = 10000
+max_iter_PDMM = 500
 area_size = 100
 radius = 20
 min_coverage = 0.85
@@ -221,18 +221,16 @@ num_nodes = j -1
 num_edges = int(sum(sum(np.tril(adjacency_matrix)-np.eye((num_nodes)))))
 
 x0 = np.random.uniform(low=0, high=50.0, size=num_nodes)
-x_iterating = x0
-print(x0)
+x_iterating = x0.copy()
+
 x_list_RG = []
 P = randomized_gossip(adjacency_matrix) # weighted values for x[k]?
 
-print(P)
 for k in range(max_iter_RG):
     #print(adjacency_matrix.shape)
     i,j = find_partner(P) # here we need to use find_partner to find the specific index of node k to place the average in!
     #x_iterating[connecting_node],_ = randomized_gossip(adjacency_matrix,x_iterating[connecting_node],num_nodes) # weighted values for x[connecting node]?
     x_mean = (1/2)*(x_iterating[i] + x_iterating[j])
-    print(x_iterating)
     x_iterating[i] = x_mean
     x_iterating[j] = x_mean
     # these 2 nodes now both need to set their values to the average: 1/2(x_k+x_connected) (I think?)
@@ -240,10 +238,6 @@ for k in range(max_iter_RG):
     # something like this?
     #x_iterating[k],x_iterating[connecting_node] = 1/2*(x_iterating[k] + x_iterating[connecting_node])
     x_list_RG.append(x_iterating.copy()) # x_list can keep track of all values
-# x & y might not be needed tbh:
-x = locations[:,0]
-y = locations[:,1]
-
 
 ## PDMM:
 n = num_nodes
@@ -256,14 +250,8 @@ for i in range(n):
         if (adjacency_matrix[i,j] == 1 and i!=j):
             neighbors_i.append(j)
     neighbors_list.append(neighbors_i)
-A,b,_,d = createVectors(adjacency_matrix,n,m,x0.ndim)
-print(A)
-print(A[0][0])
-print(b)
-print(b[0])
-A_list = []
-B_list = []
-d_list = []
+
+
 """""
 c = 5
 for i in range(n):
@@ -296,27 +284,34 @@ for i in range(n):
 
 
 print("PDMM")
-c = 0.1
+c = 0.4
 a = np.zeros((n,1))
 x_PDMM = np.zeros((n,1)) # put x0 as first iteration
-#x_PDMM[:,0] = x0
-a = x0
+x_PDMM = x0.copy()
+a = x0.copy()
 z = np.zeros((2*m,1))
 y_PDMM = np.zeros((2*m,1))
-print(neighbors_list[i])
 x_list_PDMM = []
 #print(np.sign(5*np.ones(5)-neighbors_list[5])*z[5])
+#for iter in 
 for time,k in enumerate(range(max_iter_PDMM)):
-    print(time)
-    i = np.random.choice(n)
+    #print(time)
+    i = np.random.choice(n,replace=False)
     num_neighbors_i = int(sum(adjacency_matrix[i,:])) -1
-    start_idx = sum(len(sublist) for sublist in neighbors_list[0:i])
+    if i != 0:
+        start_idx = sum(len(sublist) for sublist in neighbors_list[0:i])
+    else:
+        start_idx = 0
     end_idx = start_idx + num_neighbors_i
-    
-    x_PDMM[i] = (a[i] - (np.sign((i*np.ones(num_neighbors_i))-neighbors_list[i]).reshape(-1, 1).T@z[start_idx : end_idx]))/(1+c*num_neighbors_i)
-    x_list_PDMM.append(x_PDMM.copy())
+    neighbor_npList = np.array(neighbors_list[i])
+    A_ij = np.sign((i*np.ones(num_neighbors_i))-neighbor_npList).reshape(-1, 1).T
+    #A_ij = np.ones(num_neighbors_i).T
+    x_PDMM[i] = (a[i] - (A_ij@z[start_idx : end_idx]))/(1+c*num_neighbors_i)
     print(x_PDMM)
+    x_list_PDMM.append(x_PDMM.copy())
+    #print(x_PDMM)
     for index,j in enumerate(neighbors_list[i]):
+        #y_PDMM[start_idx + index] = z[start_idx + index] + 2*c*(x_PDMM[i])
         if i<j:
             y_PDMM[start_idx + index] = z[start_idx + index] + 2*c*(1*x_PDMM[i])
         else:
@@ -324,7 +319,13 @@ for time,k in enumerate(range(max_iter_PDMM)):
     # sending!
     for index,j in enumerate(neighbors_list[i]):
         z[start_idx + index ] = y_PDMM[start_idx + index] # = y_PDMM[j]
+    #print(z)
 
+
+
+# x & y might not be needed tbh:
+x = locations[:,0]
+y = locations[:,1]
 """ Chatgpt to plot lol """
 from shapely.geometry import MultiPolygon, Polygon
 
@@ -386,10 +387,11 @@ plt.tight_layout()
 plt.show()
 
 x_avg = np.mean(x0)
-
+print(x0)
+print(x_avg)
 # Compute errors
-errors_PDMM = [np.linalg.norm(x_k - x_avg)**2 for x_k in x_list_PDMM]
-errors_gossip = [np.linalg.norm(x_k - x_avg)**2 for x_k in x_list_RG]
+errors_PDMM = [np.linalg.norm(x_k - x_avg * np.ones_like(x_k))**2 for x_k in x_list_PDMM]
+errors_gossip = [np.linalg.norm(x_k - x_avg * np.ones_like(x_k))**2 for x_k in x_list_RG]
 
 plt.figure(figsize=(10, 6))
 plt.semilogy(errors_PDMM, label='PDMM', linewidth=2)
