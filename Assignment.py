@@ -17,7 +17,8 @@ np.random.seed(5885221)
 """ Variables """
 # Tuning variables:
 node_max = 200
-max_iter = 500
+max_iter_RG = 500
+max_iter_PDMM = 10000
 area_size = 100
 radius = 20
 min_coverage = 0.85
@@ -222,11 +223,11 @@ num_edges = int(sum(sum(np.tril(adjacency_matrix)-np.eye((num_nodes)))))
 x0 = np.random.uniform(low=0, high=50.0, size=num_nodes)
 x_iterating = x0
 print(x0)
-x_list = []
+x_list_RG = []
 P = randomized_gossip(adjacency_matrix) # weighted values for x[k]?
 
 print(P)
-for k in range(max_iter):
+for k in range(max_iter_RG):
     #print(adjacency_matrix.shape)
     i,j = find_partner(P) # here we need to use find_partner to find the specific index of node k to place the average in!
     #x_iterating[connecting_node],_ = randomized_gossip(adjacency_matrix,x_iterating[connecting_node],num_nodes) # weighted values for x[connecting node]?
@@ -238,7 +239,7 @@ for k in range(max_iter):
     ### but do they use the same weights or other ones? then is it randomized? or is only the chosen node randomized?
     # something like this?
     #x_iterating[k],x_iterating[connecting_node] = 1/2*(x_iterating[k] + x_iterating[connecting_node])
-    x_list.append(x_iterating.copy()) # x_list can keep track of all values
+    x_list_RG.append(x_iterating.copy()) # x_list can keep track of all values
 # x & y might not be needed tbh:
 x = locations[:,0]
 y = locations[:,1]
@@ -247,11 +248,12 @@ y = locations[:,1]
 ## PDMM:
 n = num_nodes
 m = num_edges
+test = np.zeros((2*m,1))
 neighbors_list = []
 for i in range(n):
     neighbors_i = []
     for j in range(n):
-        if (adjacency_matrix[i,j] == 1):
+        if (adjacency_matrix[i,j] == 1 and i!=j):
             neighbors_i.append(j)
     neighbors_list.append(neighbors_i)
 A,b,_,d = createVectors(adjacency_matrix,n,m,x0.ndim)
@@ -293,25 +295,35 @@ for i in range(n):
 """""
 
 
-print("test")
-c = 5
+print("PDMM")
+c = 0.1
 a = np.zeros((n,1))
-x_PDMM = np.zeros((n,max_iter+1)) # put x0 as first iteration
-x_PDMM[:,0] = x0
-m = 1
-for i in range(n):
-    a[i] = np.average(adjacency_matrix[i,:]*x0)
-    num_neighbors = int(sum(adjacency_matrix[i,:])-1)
-    z = np.zeros((m,num_neighbors))
-    summation = np.zeros((num_neighbors,m))
-    for time,k in enumerate(range(max_iter)):
-        print(time)
-        for index,j in enumerate(neighbors_list[i]):
-            summation[index] = (A[i][j])*z[index]
-        x_PDMM[i,k+1] = (a[i] - np.sum(summation)/(1+c*num_neighbors))
-        for index,j in enumerate(neighbors_list[i]):
-                y = z[:,index] + 2*c*(A[i][j]*x[i,k+1])
-                z[:,index] = y
+x_PDMM = np.zeros((n,1)) # put x0 as first iteration
+#x_PDMM[:,0] = x0
+a = x0
+z = np.zeros((2*m,1))
+y_PDMM = np.zeros((2*m,1))
+print(neighbors_list[i])
+x_list_PDMM = []
+#print(np.sign(5*np.ones(5)-neighbors_list[5])*z[5])
+for time,k in enumerate(range(max_iter_PDMM)):
+    print(time)
+    i = np.random.choice(n)
+    num_neighbors_i = int(sum(adjacency_matrix[i,:])) -1
+    start_idx = sum(len(sublist) for sublist in neighbors_list[0:i])
+    end_idx = start_idx + num_neighbors_i
+    
+    x_PDMM[i] = (a[i] - (np.sign((i*np.ones(num_neighbors_i))-neighbors_list[i]).reshape(-1, 1).T@z[start_idx : end_idx]))/(1+c*num_neighbors_i)
+    x_list_PDMM.append(x_PDMM.copy())
+    print(x_PDMM)
+    for index,j in enumerate(neighbors_list[i]):
+        if i<j:
+            y_PDMM[start_idx + index] = z[start_idx + index] + 2*c*(1*x_PDMM[i])
+        else:
+            y_PDMM[start_idx + index] = z[start_idx + index] + 2*c*(-1*x_PDMM[i])
+    # sending!
+    for index,j in enumerate(neighbors_list[i]):
+        z[start_idx + index ] = y_PDMM[start_idx + index] # = y_PDMM[j]
 
 """ Chatgpt to plot lol """
 from shapely.geometry import MultiPolygon, Polygon
@@ -341,7 +353,7 @@ plt.title('Clipped and Unioned Coverage Area')
 plt.grid(True)
 plt.show()
 
-x_array = np.array(x_list)  # shape: (iterations+1, num_nodes)
+x_array = np.array(x_list_RG)  # shape: (iterations+1, num_nodes)
 
 plt.figure(figsize=(10, 6))
 num_nodes = x_array.shape[1]
@@ -357,25 +369,37 @@ plt.grid(True)
 plt.tight_layout()
 plt.show()
 
-# Compute the average value of the initial state (consensus target)
-x_avg = np.mean(x_array[0])  # constant target value
-errors = []
+x_array = np.array(x_list_PDMM)  # shape: (iterations+1, num_nodes)
 
-# Compute squared consensus error at each iteration
-for x_k in x_array:
-    error = np.linalg.norm(x_k - x_avg)**2
-    errors.append(error)
-
-# Plot on semilogy scale (like your reference plot)
 plt.figure(figsize=(10, 6))
-plt.semilogy(errors, label='Randomized Gossip', color='darkorange', linewidth=2)
+num_nodes = x_array.shape[1]
+
+for i in range(num_nodes):
+    plt.plot(x_array[:, i])
 
 plt.xlabel('Iteration $k$')
-plt.ylabel(r'$||x(k) - x_{\mathrm{avg}}*1||^2$')
-plt.title('Consensus Error Over Time')
+plt.ylabel('Value $x_i[k]$')
+plt.title('Randomized Gossip Convergence Over Time')
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+x_avg = np.mean(x0)
+
+# Compute errors
+errors_PDMM = [np.linalg.norm(x_k - x_avg)**2 for x_k in x_list_PDMM]
+errors_gossip = [np.linalg.norm(x_k - x_avg)**2 for x_k in x_list_RG]
+
+plt.figure(figsize=(10, 6))
+plt.semilogy(errors_PDMM, label='PDMM', linewidth=2)
+plt.semilogy(errors_gossip, label='Randomized Gossip', linewidth=2, linestyle='--')
+
+plt.xlabel('Iteration $k$')
+plt.ylabel(r'$||x(k) - x_{\mathrm{avg}}\cdot\mathbf{1}||^2$')
+plt.yscale('log')
+plt.title('Consensus Error Over Time: PDMM vs Gossip')
 plt.grid(True, which="both", ls="--")
 plt.legend()
 plt.tight_layout()
 plt.show()
-#plt.scatter(x, y, s=radius, alpha=0.5)
-#plt.show()
