@@ -283,6 +283,7 @@ for i in range(n):
 """""
 
 
+
 print("PDMM")
 c = 0.4
 a = np.zeros((n,1))
@@ -319,7 +320,8 @@ for time,k in enumerate(range(max_iter_PDMM)):
             y_PDMM[start_idx_ij + index] = z[start_idx_ij + index] + 2*c*(1*x_PDMM[i])
         else:
             y_PDMM[start_idx_ij + index] = z[start_idx_ij + index] + 2*c*(-1*x_PDMM[i])
-        
+    # sending!
+    for index,j in enumerate(neighbors_list[i]):        
         # get the edge index for ji pairs
         if j != 0:
             start_idx_ji = sum(len(sublist) for sublist in neighbors_list[0:j])
@@ -327,11 +329,6 @@ for time,k in enumerate(range(max_iter_PDMM)):
             start_idx_ji = 0
         idx_ji = start_idx_ji + neighbors_list[j].index(i) # connection of ji
         z[idx_ji] = y_PDMM[start_idx_ij + index]
-        
-    # # sending!
-    # for index,j in enumerate(neighbors_list[i]):
-    #     z[start_idx + index ] = y_PDMM[start_idx + index] # = y_PDMM[j]
-    # #print(z)
 
 
 
