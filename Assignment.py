@@ -298,28 +298,40 @@ for time,k in enumerate(range(max_iter_PDMM)):
     #print(time)
     i = np.random.choice(n,replace=False)
     num_neighbors_i = int(sum(adjacency_matrix[i,:])) -1
+    # get the edge index for ij pairs
     if i != 0:
-        start_idx = sum(len(sublist) for sublist in neighbors_list[0:i])
+        start_idx_ij = sum(len(sublist) for sublist in neighbors_list[0:i])
     else:
-        start_idx = 0
-    end_idx = start_idx + num_neighbors_i
+        start_idx_ij = 0
+    end_idx_ij = start_idx_ij + num_neighbors_i   
+    
+    
     neighbor_npList = np.array(neighbors_list[i])
-    A_ij = np.sign((i*np.ones(num_neighbors_i))-neighbor_npList).reshape(-1, 1).T
+    A_ij = np.sign((neighbor_npList - i*np.ones(num_neighbors_i))).reshape(-1, 1).T
     #A_ij = np.ones(num_neighbors_i).T
-    x_PDMM[i] = (a[i] - (A_ij@z[start_idx : end_idx]))/(1+c*num_neighbors_i)
+    x_PDMM[i] = (a[i] - (A_ij@z[start_idx_ij : end_idx_ij]))/(1+c*num_neighbors_i)
     print(x_PDMM)
     x_list_PDMM.append(x_PDMM.copy())
     #print(x_PDMM)
     for index,j in enumerate(neighbors_list[i]):
         #y_PDMM[start_idx + index] = z[start_idx + index] + 2*c*(x_PDMM[i])
         if i<j:
-            y_PDMM[start_idx + index] = z[start_idx + index] + 2*c*(1*x_PDMM[i])
+            y_PDMM[start_idx_ij + index] = z[start_idx_ij + index] + 2*c*(1*x_PDMM[i])
         else:
-            y_PDMM[start_idx + index] = z[start_idx + index] + 2*c*(-1*x_PDMM[i])
-    # sending!
-    for index,j in enumerate(neighbors_list[i]):
-        z[start_idx + index ] = y_PDMM[start_idx + index] # = y_PDMM[j]
-    #print(z)
+            y_PDMM[start_idx_ij + index] = z[start_idx_ij + index] + 2*c*(-1*x_PDMM[i])
+        
+        # get the edge index for ji pairs
+        if j != 0:
+            start_idx_ji = sum(len(sublist) for sublist in neighbors_list[0:j])
+        else:
+            start_idx_ji = 0
+        idx_ji = start_idx_ji + neighbors_list[j].index(i) # connection of ji
+        z[idx_ji] = y_PDMM[start_idx_ij + index]
+        
+    # # sending!
+    # for index,j in enumerate(neighbors_list[i]):
+    #     z[start_idx + index ] = y_PDMM[start_idx + index] # = y_PDMM[j]
+    # #print(z)
 
 
 
