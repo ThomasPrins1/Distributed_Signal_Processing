@@ -110,16 +110,41 @@ def findIndex(dim):
         index = 0
     return index
 
+
+def algebraic_connectivity(A):
+    """
+    Computes the Laplacian matrix and returns the second smallest eigenvalue 
+    (algebraic connectivity).
+    """   
+    # Degree matrix
+    D = np.diag(np.sum(A, axis=1))   
+    # Laplacian matrix
+    L = D - A
+    # Compute eigenvalues
+    eigenvalues = np.linalg.eigvalsh(L)  # eigvalsh is for symmetric/hermitian matrices (like Laplacian)
+    # Sort eigenvalues
+    eigenvalues = np.sort(eigenvalues)
+    # Return the second smallest eigenvalue (algebraic connectivity)
+    if len(A) > 1:
+        lambda2 = eigenvalues[1]
+    else:
+        lambda2 = 0
+    return lambda2
+
+
+
 """ Main Code """
 
+locations = []
 for j in range(1,node_max): # Try for number of nodes
     print("iteration",j,":")
     if (covered_area < min_coverage) or connected_graph == False: # Skip loop if the covered area is good enough & proper connected
-        temp = np.zeros([j,2])
-        locations = plotNodes(temp,j,area_size)
+        
+        node_location = np.random.uniform(0,area_size,[1,2])[0]
+        locations.append(node_location)
         np_locations = np.array(locations)
         # Create points with radius for area calculations:
-        covered_area,adjacency_matrix = createBoundedPoints(locations,box_bounds,j)
+        covered_area,adjacency_matrix = createBoundedPoints(np_locations,box_bounds,j)
         temp2 = covered_area
         covered_area = covered_area.area/(area_size**2)
         print("Area filed",(covered_area*100),"%")
@@ -137,6 +162,18 @@ for j in range(1,node_max): # Try for number of nodes
                 break
             print("i needed to connect", i)
         print("Graph is now connected:",connected_graph)
+        
+        ## Check connectivity using algebraic connectivity parameter
+        # A = adjacency_matrix.copy() # create adjacency matrix with diagonals of 0
+        # np.fill_diagonal(A, 0)
+        # alg_connectivity = algebraic_connectivity(A)
+        # print('Algebraic connectivity:',alg_connectivity)
+        # if alg_connectivity > 10**-6:
+        #     connected_graph = True
+        # else:
+        #     connected_graph = False
+        # print("Graph is connected:",connected_graph)
+        
     else:
         break
 
@@ -290,8 +327,8 @@ best_c_index_median = np.argmin(np.array(total_error_PDMM_median)) # this value 
 
 
 # x & y might not be needed tbh:
-x = locations[:,0]
-y = locations[:,1]
+x = np_locations[:,0]
+y = np_locations[:,1]
 """ Chatgpt to plot lol """
 from shapely.geometry import MultiPolygon, Polygon
 
