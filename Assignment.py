@@ -17,8 +17,8 @@ np.random.seed(5885221)
 """ Variables """
 # Tuning variables:
 node_max = 200
-max_iter_RG = 4000
-max_iter_PDMM = 4000
+max_iter_RG = 700
+max_iter_PDMM = 20*10**3
 area_size = 100
 radius = 20
 min_coverage = 0.85
@@ -110,16 +110,41 @@ def findIndex(dim):
         index = 0
     return index
 
+
+def algebraic_connectivity(A):
+    """
+    Computes the Laplacian matrix and returns the second smallest eigenvalue 
+    (algebraic connectivity).
+    """   
+    # Degree matrix
+    D = np.diag(np.sum(A, axis=1))   
+    # Laplacian matrix
+    L = D - A
+    # Compute eigenvalues
+    eigenvalues = np.linalg.eigvalsh(L)  # eigvalsh is for symmetric/hermitian matrices (like Laplacian)
+    # Sort eigenvalues
+    eigenvalues = np.sort(eigenvalues)
+    # Return the second smallest eigenvalue (algebraic connectivity)
+    if len(A) > 1:
+        lambda2 = eigenvalues[1]
+    else:
+        lambda2 = 0
+    return lambda2
+
+
+
 """ Main Code """
 
+locations = []
 for j in range(1,node_max): # Try for number of nodes
     print("iteration",j,":")
     if (covered_area < min_coverage) or connected_graph == False: # Skip loop if the covered area is good enough & proper connected
-        temp = np.zeros([j,2])
-        locations = plotNodes(temp,j,area_size)
+        
+        node_location = np.random.uniform(0,area_size,[1,2])[0]
+        locations.append(node_location)
         np_locations = np.array(locations)
         # Create points with radius for area calculations:
-        covered_area,adjacency_matrix = createBoundedPoints(locations,box_bounds,j)
+        covered_area,adjacency_matrix = createBoundedPoints(np_locations,box_bounds,j)
         temp2 = covered_area
         covered_area = covered_area.area/(area_size**2)
         print("Area filed",(covered_area*100),"%")
@@ -137,6 +162,18 @@ for j in range(1,node_max): # Try for number of nodes
                 break
             print("i needed to connect", i)
         print("Graph is now connected:",connected_graph)
+        
+        ## Check connectivity using algebraic connectivity parameter
+        # A = adjacency_matrix.copy() # create adjacency matrix with diagonals of 0
+        # np.fill_diagonal(A, 0)
+        # alg_connectivity = algebraic_connectivity(A)
+        # print('Algebraic connectivity:',alg_connectivity)
+        # if alg_connectivity > 10**-6:
+        #     connected_graph = True
+        # else:
+        #     connected_graph = False
+        # print("Graph is connected:",connected_graph)
+        
     else:
         break
 
@@ -145,8 +182,10 @@ for j in range(1,node_max): # Try for number of nodes
 num_nodes = j -1
 num_edges = int(sum(sum(np.tril(adjacency_matrix)-np.eye((num_nodes)))))
 
-#x0 = np.random.uniform(low=0, high=20.0, size=num_nodes)
-x0 = np.random.normal(10, 2, size=num_nodes)
+# x_avg = 22
+# sigma = 3
+# x0 = np.random.normal(x_avg,sigma, num_nodes)
+x0 = np.random.uniform(low=0, high=20.0, size=num_nodes)
 x_iterating = x0.copy()
 
 x_list_RG = []
@@ -171,118 +210,196 @@ for i in range(n):
             neighbors_i.append(j)
     neighbors_list.append(neighbors_i)
 
-print("PDMM")
+
+######################################################################################
+## Try out different c values and plot transmission vs c vals to choose best one
+error_th = 10**-12
+print("PDMM over possible c values")
+max_iter_PDMM_new = 6*10**5
+c_vals = np.linspace(start=0.1,stop=0.9,num=9)
 x_avg = np.mean(x0)
-c_max = np.linspace(start=0.1,stop=0.9,num=9)
+max_trans_arr = np.zeros(9)
+for idx_c, c in enumerate(c_vals):   
+    print('c value:', c)
+    a = np.zeros((n,1))
+    x_PDMM = np.zeros((n,1)) # put x0 as first iteration
+    x_PDMM = x0.copy()
+    a = x0.copy()
+    z = np.zeros((2*m,1))
+    y_PDMM = np.zeros((2*m,1))
+    x_list_PDMM = []
+    x_list_PDMM.append(x0.copy())
+    for k in range(max_iter_PDMM_new):
+        x_k = x_list_PDMM[k]
+        diff = np.linalg.norm(x_k - x_avg * np.ones_like(x_k))**2
+        if diff > error_th:
+            i = np.random.choice(n,replace=False)
+            num_neighbors_i = int(sum(adjacency_matrix[i,:])) -1
+            # get the edge index for ij pairs
+            if i != 0:
+                start_idx_ij = sum(len(sublist) for sublist in neighbors_list[0:i])
+            else:
+                start_idx_ij = 0
+            end_idx_ij = start_idx_ij + num_neighbors_i   
+            
+            
+            neighbor_npList = np.array(neighbors_list[i])
+            A_ij = np.sign((neighbor_npList - i*np.ones(num_neighbors_i))).reshape(-1, 1).T
+            #A_ij = np.ones(num_neighbors_i).T
+            x_PDMM[i] = (a[i] - (A_ij@z[start_idx_ij : end_idx_ij]).item())/(1+c*num_neighbors_i)
+            print(x_PDMM, 'c val:', c, 'iteration:', k, 'error:', diff)
+            x_list_PDMM.append(x_PDMM.copy())
+            #print(x_PDMM)
+            for index,j in enumerate(neighbors_list[i]):
+                #y_PDMM[start_idx + index] = z[start_idx + index] + 2*c*(x_PDMM[i])
+                if i<j:
+                    y_PDMM[start_idx_ij + index] = z[start_idx_ij + index] + 2*c*(1*x_PDMM[i])
+                else:
+                    y_PDMM[start_idx_ij + index] = z[start_idx_ij + index] + 2*c*(-1*x_PDMM[i])
+            # sending!
+            for index,j in enumerate(neighbors_list[i]):        
+                # get the edge index for ji pairs
+                if j != 0:
+                    start_idx_ji = sum(len(sublist) for sublist in neighbors_list[0:j])
+                else:
+                    start_idx_ji = 0
+                idx_ji = start_idx_ji + neighbors_list[j].index(i) # connection of ji
+                z[idx_ji] = y_PDMM[start_idx_ij + index]
+        else:
+            max_trans_arr[idx_c] = k
+            print('DONE with c value:', c)
+            break
+
+plt.figure(figsize=(10, 6))
+plt.plot(c_vals, max_trans_arr, linewidth=2)
+
+plt.xlabel('$c$')
+plt.ylabel('transmissions')
+plt.yscale('log')
+plt.title(r'Number of transmissions for $||x(k) - x_{\mathrm{avg}}\cdot\mathbf{1}||^2$ < 10^-12')
+plt.grid(True, which="both", ls="--")
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+
+#Get the best c val for PDMM average
+best_c_index_PDMM_avg = np.argmin(max_trans_arr)
+######################################################################################
+
+print("PDMM")
+c = c_vals(best_c_index_PDMM_avg)
 a = np.zeros((n,1))
 x_PDMM = np.zeros((n,1)) # put x0 as first iteration
 x_PDMM = x0.copy()
 a = x0.copy()
 z = np.zeros((2*m,1))
 y_PDMM = np.zeros((2*m,1))
-varC_x_list_PDMM = []
-total_error_PDMM = []
-#print(np.sign(5*np.ones(5)-neighbors_list[5])*z[5])
-for c in c_max:
-    print("Value for c:",c)
-    x_list_PDMM = []
-    summed_error = 0
-    for time,k in enumerate(range(max_iter_PDMM)):
-        #print(time)
-        i = np.random.choice(n)
-        num_neighbors_i = int(sum(adjacency_matrix[i,:])) -1
-        # get the edge index for ij pairs
-        if i != 0:
-            start_idx_ij = sum(len(sublist) for sublist in neighbors_list[0:i])
+x_list_PDMM = []
+x_list_PDMM.append(a)
+for k in enumerate(range(max_iter_PDMM)):
+    i = np.random.choice(n)
+    num_neighbors_i = int(sum(adjacency_matrix[i,:])) -1
+    # get the edge index for ij pairs
+    if i != 0:
+        start_idx_ij = sum(len(sublist) for sublist in neighbors_list[0:i])
+    else:
+        start_idx_ij = 0
+    end_idx_ij = start_idx_ij + num_neighbors_i   
+    
+    
+    neighbor_npList = np.array(neighbors_list[i])
+    A_ij = np.sign((neighbor_npList - i*np.ones(num_neighbors_i))).reshape(-1, 1).T
+    #A_ij = np.ones(num_neighbors_i).T
+    x_PDMM[i] = (a[i] - (A_ij@z[start_idx_ij : end_idx_ij]))/(1+c*num_neighbors_i)
+    print(x_PDMM)
+    x_list_PDMM.append(x_PDMM.copy())
+    for index,j in enumerate(neighbors_list[i]):
+        #y_PDMM[start_idx + index] = z[start_idx + index] + 2*c*(x_PDMM[i])
+        if i<j:
+            y_PDMM[start_idx_ij + index] = z[start_idx_ij + index] + 2*c*(1*x_PDMM[i])
         else:
-            start_idx_ij = 0
-        end_idx_ij = start_idx_ij + num_neighbors_i   
-        
-        
-        neighbor_npList = np.array(neighbors_list[i])
-        A_ij = np.sign((neighbor_npList - i*np.ones(num_neighbors_i))).reshape(-1, 1).T
-        #A_ij = np.ones(num_neighbors_i).T
-        x_PDMM[i] = (a[i] - (A_ij@z[start_idx_ij : end_idx_ij]))/(1+c*num_neighbors_i)
-        summed_error += np.linalg.norm(x_PDMM - x_avg * np.ones_like(x_PDMM))**2
-        
-        x_list_PDMM.append(x_PDMM.copy())
-        #print(x_PDMM)
-        for index,j in enumerate(neighbors_list[i]):
-            #y_PDMM[start_idx + index] = z[start_idx + index] + 2*c*(x_PDMM[i])
-            if i<j:
-                y_PDMM[start_idx_ij + index] = z[start_idx_ij + index] + 2*c*(1*x_PDMM[i])
-            else:
-                y_PDMM[start_idx_ij + index] = z[start_idx_ij + index] + 2*c*(-1*x_PDMM[i])
-        # sending!
-        for index,j in enumerate(neighbors_list[i]):        
-            # get the edge index for ji pairs
-            if j != 0:
-                start_idx_ji = sum(len(sublist) for sublist in neighbors_list[0:j])
-            else:
-                start_idx_ji = 0
-            idx_ji = start_idx_ji + neighbors_list[j].index(i) # connection of ji
-            z[idx_ji] = y_PDMM[start_idx_ij + index]
-    total_error_PDMM.append(summed_error)
-    varC_x_list_PDMM.append(x_list_PDMM)
-best_c_index = np.argmin(np.array(total_error_PDMM)) # this value represents the index of c basically
-print("Best value for c",best_c_index)
+            y_PDMM[start_idx_ij + index] = z[start_idx_ij + index] + 2*c*(-1*x_PDMM[i])
+    # sending!
+    for index,j in enumerate(neighbors_list[i]):        
+        # get the edge index for ji pairs
+        if j != 0:
+            start_idx_ji = sum(len(sublist) for sublist in neighbors_list[0:j])
+        else:
+            start_idx_ji = 0
+        idx_ji = start_idx_ji + neighbors_list[j].index(i) # connection of ji
+        z[idx_ji] = y_PDMM[start_idx_ij + index]
+
+
+
+
+
 
 print("PDMM using median")
-c_max = np.linspace(start=0.1,stop=0.9,num=9)
+c = 0.4
 x_PDMM_median = np.zeros((n,1)) # put x0 as first iteration
 x_PDMM_median = x0.copy()
 s = x0.copy()
-#z = np.zeros((2*m,1))
+
+z = np.zeros((2*m,1))
 mu,sigma = [1,1]
-z = np.random.normal(1*mu,sigma,2*m)
+for i in range(n):
+    for index,j in enumerate(neighbors_list[i]):
+        start_idx_ij = findIndex(i)
+        start_idx_ji = findIndex(j)
+        idx_ij = start_idx_ij + index
+        idx_ji = start_idx_ji + neighbors_list[j].index(i) # connection of ji 
+        if z[idx_ij] !=0:
+            z[idx_ij], z[idx_ji] = np.random.normal(1*mu,sigma)
+
+
+
 y_PDMM_median = np.zeros((2*m,1))
-varC_x_list_PDMM_median = []
-total_error_PDMM_median = []
-for c in c_max:
-    print("Value for c:",c)
-    x_list_PDMM_median = []
-    for time,k in enumerate(range(max_iter_PDMM)):
-        #print(time)
-        summed_error = 0
-        for i in range(n):
-            num_neighbors_i = int(sum(adjacency_matrix[i,:])) -1
-            # get the edge index for ij pairs
-            start_idx_ij = findIndex(i)
-            end_idx_ij = start_idx_ij + num_neighbors_i
+x_list_PDMM_median = []
+#x_list_PDMM_median.append(x0.copy())
+max_iter_PDMM_median = 300
+for time,k in enumerate(range(max_iter_PDMM_median)):
+    #print(time)
+    for i in range(n):
+        num_neighbors_i = int(sum(adjacency_matrix[i,:])) -1
+        # get the edge index for ij pairs
+        start_idx_ij = findIndex(i)
+        end_idx_ij = start_idx_ij + num_neighbors_i
+    
+        neighbor_npList = np.array(neighbors_list[i])
+        A_ij = np.sign((neighbor_npList - i*np.ones(num_neighbors_i))).reshape(-1, 1).T
+        summed_factor_Az = A_ij@z[start_idx_ij : end_idx_ij]
+        if ((-1-summed_factor_Az)/(c*num_neighbors_i) > s[i]):
+            x_PDMM_median[i] = (-1 - (summed_factor_Az))/(c*num_neighbors_i)
+        elif ((1-summed_factor_Az)/(c*num_neighbors_i) < s[i]):
+            x_PDMM_median[i] = (1 - (summed_factor_Az))/(c*num_neighbors_i)
+        else:
+            x_PDMM_median[i] = s[i] # just the initial value
+
+       
         
-            neighbor_npList = np.array(neighbors_list[i])
-            A_ij = np.sign((neighbor_npList - i*np.ones(num_neighbors_i))).reshape(-1, 1).T
-            summed_factor_Az = A_ij@z[start_idx_ij : end_idx_ij]
-            if ((-1-summed_factor_Az)/(c*num_neighbors_i) > s[i]):
-                x_PDMM_median[i] = (-1 - (summed_factor_Az))/(c*num_neighbors_i)
-            elif ((1-summed_factor_Az)/(c*num_neighbors_i) < s[i]):
-                x_PDMM_median[i] = (1 - (summed_factor_Az))/(c*num_neighbors_i)
+        for index,j in enumerate(neighbors_list[i]):
+            start_idx_ji = findIndex(j)
+            idx_ji = start_idx_ji + neighbors_list[j].index(i) # connection of ji
+            if i<j:
+                z[idx_ji] = (1/2)*z[idx_ji] + (1/2)*(z[start_idx_ij + index] + 2*c*(1*x_PDMM_median[i]))
             else:
-                x_PDMM_median[i] = s[i] # just the initial value
+                z[idx_ji] = (1/2)*z[idx_ji] + (1/2)*(z[start_idx_ij + index] + 2*c*(-1*x_PDMM_median[i]))
 
-            summed_error += np.linalg.norm(x_PDMM_median - x_avg * np.ones_like(x_PDMM_median))**2
-            
-            for index,j in enumerate(neighbors_list[i]):
-                start_idx_ji = findIndex(j)
-                idx_ji = start_idx_ji + neighbors_list[j].index(i) # connection of ji
-                if i<j:
-                    z[idx_ji] = (1/2)*z[idx_ji] + (1/2)*(z[start_idx_ij + index] + 2*c*(1*x_PDMM_median[i]))
-                else:
-                    z[idx_ji] = (1/2)*z[idx_ji] + (1/2)*(z[start_idx_ij + index] + 2*c*(-1*x_PDMM_median[i]))
+        # sending xi to xj's?
+        for j in (neighbors_list[i]):
+            x_PDMM_median[j] = x_PDMM_median[i]
+                
+                
+        # for index,j in enumerate(neighbors_list[i]):
+        #     start_idx_ji = findIndex(j)
+        #     idx_ji = start_idx_ji + neighbors_list[j].index(i) # connection of ji    
+        #     if i<j:
+        #         z[idx_ji] = (1/2)*z[idx_ji] + (1/2)*(z[start_idx_ij + index] + 2*c*(1*x_PDMM_median[i]))
+        #     else:
+        #         z[idx_ji] = (1/2)*z[idx_ji] + (1/2)*(z[start_idx_ij + index] + 2*c*(-1*x_PDMM_median[i]))
 
-        # sending xi to j?
-            for index,j in enumerate(neighbors_list[i]):
-                start_idx_ji = findIndex(j)
-                idx_ji = start_idx_ji + neighbors_list[j].index(i) # connection of ji    
-                if i<j:
-                    z[idx_ji] = (1/2)*z[idx_ji] + (1/2)*(z[start_idx_ij + index] + 2*c*(1*x_PDMM_median[i]))
-                else:
-                    z[idx_ji] = (1/2)*z[idx_ji] + (1/2)*(z[start_idx_ij + index] + 2*c*(-1*x_PDMM_median[i]))
-                #z[start_idx_ij+index] = z[idx_ji]
-        x_list_PDMM_median.append(x_PDMM_median.copy())
-    total_error_PDMM_median.append(summed_error)
-    varC_x_list_PDMM_median.append(x_list_PDMM_median)
-best_c_index_median = np.argmin(np.array(total_error_PDMM_median)) # this value represents the index of c basically
+    x_list_PDMM_median.append(x_PDMM_median.copy())
 
 
 
@@ -290,8 +407,8 @@ best_c_index_median = np.argmin(np.array(total_error_PDMM_median)) # this value 
 
 
 # x & y might not be needed tbh:
-x = locations[:,0]
-y = locations[:,1]
+x = np_locations[:,0]
+y = np_locations[:,1]
 """ Chatgpt to plot lol """
 from shapely.geometry import MultiPolygon, Polygon
 
@@ -320,6 +437,7 @@ plt.title('Clipped and Unioned Coverage Area')
 plt.grid(True)
 plt.show()
 
+##### Plots of Randomized Gossip
 x_array = np.array(x_list_RG)  # shape: (iterations+1, num_nodes)
 
 plt.figure(figsize=(10, 6))
@@ -336,7 +454,32 @@ plt.grid(True)
 plt.tight_layout()
 plt.show()
 
-x_array = np.array(varC_x_list_PDMM[best_c_index])  # shape: (iterations+1, num_nodes)
+x_avg = np.mean(x0)
+print(x0)
+print(x_avg)
+# Compute errors
+errors_gossip = [np.linalg.norm(x_k - x_avg * np.ones_like(x_k))**2 for x_k in x_list_RG]
+
+plt.figure(figsize=(10, 6))
+plt.semilogy(errors_gossip, label='Randomized Gossip', linewidth=2)
+
+plt.xlabel('Iteration $k$')
+plt.ylabel(r'$||x(k) - x_{\mathrm{avg}}\cdot\mathbf{1}||^2$')
+plt.yscale('log')
+plt.title('Consensus Error Over Time: Randomized Gossip')
+plt.grid(True, which="both", ls="--")
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+
+print("average of x0:",x_avg)
+
+
+
+###### Plots of PDMM average
+
+x_array = np.array(x_list_PDMM)  # shape: (iterations+1, num_nodes)
 
 plt.figure(figsize=(10, 6))
 num_nodes = x_array.shape[1]
@@ -346,13 +489,39 @@ for i in range(num_nodes):
 
 plt.xlabel('Iteration $k$')
 plt.ylabel('Value $x_i[k]$')
-plt.title('PDMM Convergence Over Time')
+plt.title('Average PDMM Convergence Over Time')
 plt.legend()
 plt.grid(True)
 plt.tight_layout()
 plt.show()
 
-x_array = np.array(varC_x_list_PDMM_median[best_c_index_median])  # shape: (iterations+1, num_nodes)
+
+
+x_avg = np.mean(x0)
+print(x0)
+print(x_avg)
+# Compute errors
+errors_PDMM = [np.linalg.norm(x_k - x_avg * np.ones_like(x_k))**2 for x_k in x_list_PDMM]
+
+plt.figure(figsize=(10, 6))
+plt.semilogy(errors_PDMM, label='PDMM', linewidth=2)
+
+plt.xlabel('Iteration $k$')
+plt.ylabel(r'$||x(k) - x_{\mathrm{avg}}\cdot\mathbf{1}||^2$')
+plt.yscale('log')
+plt.title('Consensus Error Over Time: PDMM ')
+plt.grid(True, which="both", ls="--")
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+
+
+
+
+##### Plots of PDMM median
+
+x_array = np.array(x_list_PDMM_median)  # shape: (iterations+1, num_nodes)
 
 plt.figure(figsize=(10, 6))
 num_nodes = x_array.shape[1]
@@ -368,54 +537,38 @@ plt.grid(True)
 plt.tight_layout()
 plt.show()
 
-print("average of x0:",x_avg)
-# Compute errors, where PDMM error is plotted using best value for c:
-
-#x_list_PDMM_best = [min(np.linalg.norm(x_k - x_avg * np.ones_like(x_k))**2) for x_k in varC_x_list_PDMM[i] for i in varC_x_list_PDMM]
-errors_PDMM = [np.linalg.norm(x_k - x_avg * np.ones_like(x_k))**2 for x_k in varC_x_list_PDMM[best_c_index]]
-errors_PDMM_median = [np.linalg.norm(x_k - x_avg * np.ones_like(x_k))**2 for x_k in varC_x_list_PDMM_median[best_c_index_median]]
-errors_gossip = [np.linalg.norm(x_k - x_avg * np.ones_like(x_k))**2 for x_k in x_list_RG]
+x_median = np.median(x0)
+print(x0)
+print(x_median)
+# Compute errors
+errors_PDMM_median = [np.linalg.norm(x_k - x_median * np.ones_like(x_k))**2 for x_k in x_list_PDMM_median]
 
 plt.figure(figsize=(10, 6))
-plt.semilogy(errors_PDMM, label=f'PDMM (best $c$ = {c_max[best_c_index]:.2f})', linewidth=2)
-plt.semilogy(errors_PDMM_median, label=f'Median PDMM (best $c$ = {c_max[best_c_index_median]:.2f})', linewidth=2)
-plt.semilogy(errors_gossip, label='Randomized Gossip', linewidth=2, linestyle='--')
+plt.semilogy(errors_PDMM_median, label='PDMM median', linewidth=2)
 
 plt.xlabel('Iteration $k$')
 plt.ylabel(r'$||x(k) - x_{\mathrm{avg}}\cdot\mathbf{1}||^2$')
 plt.yscale('log')
-plt.title('Consensus Error Over Time: PDMM vs Gossip')
+plt.title('Consensus Error Over Time: PDMM median')
 plt.grid(True, which="both", ls="--")
 plt.legend()
 plt.tight_layout()
 plt.show()
 
-plt.figure(figsize=(12, 6))
 
-for idx, x_list in enumerate(varC_x_list_PDMM):
-    c_val = c_max[idx]
-    errors = [np.linalg.norm(x_k - x_avg * np.ones_like(x_k))**2 for x_k in x_list]
-    plt.semilogy(errors, label=f'c = {c_val:.2f}')
 
-plt.xlabel('Iteration $k$')
-plt.ylabel(r'$||x(k) - x_{\mathrm{avg}}\cdot\mathbf{1}||^2$')
-plt.title('Consensus Error Over Time for Different $c$ Values (PDMM)')
-plt.grid(True, which="both", linestyle="--")
-plt.legend()
-plt.tight_layout()
-plt.show()
 
-plt.figure(figsize=(12, 6))
+# # Compute errors, where PDMM error is plotted using best value for c:
+# plt.figure(figsize=(10, 6))
+# plt.semilogy(errors_PDMM, label=f'PDMM (best $c$ = {c_vals[best_c_index_PDMM_avg]:.2f})', linewidth=2)
+# plt.semilogy(errors_PDMM_median, label=f'Median PDMM (best $c$ = {c_vals[best_c_index_PDMM_median]:.2f})', linewidth=2)
+# plt.semilogy(errors_gossip, label='Randomized Gossip', linewidth=2, linestyle='--')
 
-for idx, x_list in enumerate(varC_x_list_PDMM_median):
-    c_val = c_max[idx]
-    errors = [np.linalg.norm(x_k - x_avg * np.ones_like(x_k))**2 for x_k in x_list]
-    plt.semilogy(errors, label=f'c = {c_val:.2f}')
-
-plt.xlabel('Iteration $k$')
-plt.ylabel(r'$||x(k) - x_{\mathrm{avg}}\cdot\mathbf{1}||^2$')
-plt.title('Consensus Error Over Time for Different $c$ Values (Median PDMM)')
-plt.grid(True, which="both", linestyle="--")
-plt.legend()
-plt.tight_layout()
-plt.show()
+# plt.xlabel('Iteration $k$')
+# plt.ylabel(r'$||x(k) - x_{\mathrm{avg}}\cdot\mathbf{1}||^2$')
+# plt.yscale('log')
+# plt.title('Consensus Error Over Time: PDMM vs Gossip')
+# plt.grid(True, which="both", ls="--")
+# plt.legend()
+# plt.tight_layout()
+# plt.show()
