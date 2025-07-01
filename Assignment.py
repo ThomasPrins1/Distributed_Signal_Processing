@@ -183,13 +183,14 @@ for j in range(1,node_max): # Try for number of nodes
 num_nodes = j - 1
 num_edges = int(sum(sum(np.tril(adjacency_matrix)-np.eye((num_nodes)))))
 
-x_avg = 22
+mu = 22
 sigma = 3
-x0 = np.random.normal(x_avg,sigma, num_nodes)
+x0 = np.random.normal(mu,sigma, num_nodes)
 #x0 = np.random.uniform(low=0, high=20.0, size=num_nodes)
 x_iterating = x0.copy()
 error_th = 10**-12
 x_list_RG = []
+x_avg = np.mean(x0)
 P = randomized_gossip(adjacency_matrix) # weighted values for x[k]?
 x_list_RG.append(x0.copy)
 for k in range(max_iter_RG):
