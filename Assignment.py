@@ -17,8 +17,8 @@ np.random.seed(5885221)
 """ Variables """
 # Tuning variables:
 node_max = 200
-max_iter_RG = 700
-max_iter_PDMM = 700
+max_iter_RG = 4000
+max_iter_PDMM = 4000
 area_size = 100
 radius = 20
 min_coverage = 0.85
