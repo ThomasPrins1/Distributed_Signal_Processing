@@ -17,7 +17,7 @@ np.random.seed(5885221)
 """ Variables """
 # Tuning variables:
 node_max = 200
-max_iter_RG = 700
+max_iter_PDMM_median = 20*10**3
 max_iter_RG = 20*10**3
 max_iter_PDMM = 20*10**3
 area_size = 100
@@ -149,7 +149,7 @@ for j in range(1,node_max): # Try for number of nodes
         temp2 = covered_area
         covered_area = covered_area.area/(area_size**2)
         print("Area filed",(covered_area*100),"%")
-        
+        """""
         adjacency_power = []
         for i in range(j):
             adjacency_power.append(np.linalg.matrix_power(adjacency_matrix,i+1))
@@ -163,17 +163,17 @@ for j in range(1,node_max): # Try for number of nodes
                 break
             print("i needed to connect", i)
         print("Graph is now connected:",connected_graph)
-        
+        """""
         ## Check connectivity using algebraic connectivity parameter
-        # A = adjacency_matrix.copy() # create adjacency matrix with diagonals of 0
-        # np.fill_diagonal(A, 0)
-        # alg_connectivity = algebraic_connectivity(A)
-        # print('Algebraic connectivity:',alg_connectivity)
-        # if alg_connectivity > 10**-6:
-        #     connected_graph = True
-        # else:
-        #     connected_graph = False
-        # print("Graph is connected:",connected_graph)
+        A = adjacency_matrix.copy() # create adjacency matrix with diagonals of 0
+        np.fill_diagonal(A, 0)
+        alg_connectivity = algebraic_connectivity(A)
+        print('Algebraic connectivity:',alg_connectivity)
+        if alg_connectivity > 10**-6:
+            connected_graph = True
+        else:
+            connected_graph = False
+        print("Graph is connected:",connected_graph)
         
     else:
         break
@@ -192,10 +192,15 @@ error_th = 10**-12
 x_list_RG = []
 x_avg = np.mean(x0)
 P = randomized_gossip(adjacency_matrix) # weighted values for x[k]?
-x_list_RG.append(x0.copy)
+print(P)
+#P = np.ones((num_nodes,num_nodes))*(1/num_nodes)
+x_list_RG.append(x0.copy())
+transmissions_RG = 0
 for k in range(max_iter_RG):
     print("progress:", k)
     x_k = x_list_RG[k]
+    print(x_k)
+    print('average val:',  x_avg)
     diff = np.linalg.norm(x_k - x_avg * np.ones_like(x_k))**2
     if diff > error_th:   
         i,j = find_partner(P) # here we need to use find_partner to find the specific index of node k to place the average in!
@@ -203,6 +208,7 @@ for k in range(max_iter_RG):
         x_iterating[i] = x_mean
         x_iterating[j] = x_mean
         x_list_RG.append(x_iterating.copy()) # x_list can keep track of all values
+        transmissions_RG += 2
     else:
         print('convergence criteria reached')
         break
@@ -299,39 +305,40 @@ print(best_c_index_PDMM_avg)
 ######################################################################################
 
 print("PDMM")
-#c = c_vals[best_c_index_PDMM_avg]
-c=0.4
+
+c=0.5
 a = np.zeros((n,1))
 x_PDMM = np.zeros((n,1)) # put x0 as first iteration
 x_PDMM = x0.copy()
 a = x0.copy()
+
 z = np.zeros((2*m,1))
 y_PDMM = np.zeros((2*m,1))
 x_list_PDMM = []
 x_list_PDMM.append(a)
 error_th = 10**-12
 x_avg = np.mean(x0)
-for k in enumerate(range(max_iter_PDMM)):
+transmissions_PDMM_avg = 0
+for k in range(max_iter_PDMM):
     x_k = x_list_PDMM[k]
     diff = np.linalg.norm(x_k - x_avg * np.ones_like(x_k))**2
     if diff > error_th:
         i = np.random.choice(n)
-        num_neighbors_i = int(sum(adjacency_matrix[i,:])) -1
+        num_neighbors_i = int(sum(adjacency_matrix[i,:])) - 1
         # get the edge index for ij pairs
         if i != 0:
             start_idx_ij = sum(len(sublist) for sublist in neighbors_list[0:i])
         else:
             start_idx_ij = 0
-        end_idx_ij = start_idx_ij + num_neighbors_i   
-        
+        end_idx_ij = start_idx_ij + num_neighbors_i
         
         neighbor_npList = np.array(neighbors_list[i])
         A_ij = np.sign((neighbor_npList - i*np.ones(num_neighbors_i))).reshape(-1, 1).T
         x_PDMM[i] = (a[i] - (A_ij@z[start_idx_ij : end_idx_ij]))/(1+c*num_neighbors_i)
         print(x_PDMM)
         x_list_PDMM.append(x_PDMM.copy())
+
         for index,j in enumerate(neighbors_list[i]):
-            #y_PDMM[start_idx + index] = z[start_idx + index] + 2*c*(x_PDMM[i])
             if i<j:
                 y_PDMM[start_idx_ij + index] = z[start_idx_ij + index] + 2*c*(1*x_PDMM[i])
             else:
@@ -345,11 +352,24 @@ for k in enumerate(range(max_iter_PDMM)):
                 start_idx_ji = 0
             idx_ji = start_idx_ji + neighbors_list[j].index(i) # connection of ji
             z[idx_ji] = y_PDMM[start_idx_ij + index]
+            transmissions_PDMM_avg += 1
+
     else:
         print('convergence reached')
         break
 
-
+## TEST:
+"""""
+index_j = np.random.choice(num_neighbors_i)
+j = neighbors_list[i][index_j]
+if i<j:
+   y_PDMM[start_idx_ij] = z[start_idx_ij] + 2*c*(1*x_PDMM[i])
+else:
+   y_PDMM[start_idx_ij] = z[start_idx_ij] + 2*c*(-1*x_PDMM[i])
+start_idx_ji = sum(len(sublist) for sublist in neighbors_list[j])
+idx_ji = start_idx_ji + neighbors_list[index_j].index(i)
+z[idx_ji] = y_PDMM[start_idx_ij]
+"""""
 
 
 print("PDMM using median")
@@ -371,59 +391,69 @@ for i in range(n):
 
 
 y_PDMM_median = np.zeros((2*m,1))
-x_list_PDMM_median = []
+x_list_PDMM_median = [x0.copy()]
 #x_list_PDMM_median.append(x0.copy())
-max_iter_PDMM_median = 700
+
 error_th = 10**-12
 c=0.1
-#x_list_PDMM_median.append(x_PDMM_median)
-for k in enumerate(range(max_iter_PDMM_median)):
-    for i in range(n):
-        num_neighbors_i = int(sum(adjacency_matrix[i,:])) -1
-        # get the edge index for ij pairs
-        start_idx_ij = findIndex(i)
-        end_idx_ij = start_idx_ij + num_neighbors_i
-    
-        neighbor_npList = np.array(neighbors_list[i])
-        A_ij = np.sign((neighbor_npList - i*np.ones(num_neighbors_i))).reshape(-1, 1).T
-        summed_factor_Az = A_ij@z[start_idx_ij : end_idx_ij]
-        if ((-1-summed_factor_Az)/(c*num_neighbors_i) > s[i]):
-            x_PDMM_median[i] = (-1 - (summed_factor_Az))/(c*num_neighbors_i)
-        elif ((1-summed_factor_Az)/(c*num_neighbors_i) < s[i]):
-            x_PDMM_median[i] = (1 - (summed_factor_Az))/(c*num_neighbors_i)
-        else:
-            x_PDMM_median[i] = s[i] # just the initial value
+transmissions_PDMM_med = 0
+x_med = np.median(x0)
+for k in range(max_iter_PDMM_median):
+    x_k = x_list_PDMM_median[k]
+    diff = np.linalg.norm(x_k - x_med * np.ones_like(x_k))**2
+    if diff > error_th:
+        for i in range(n):
+            num_neighbors_i = int(sum(adjacency_matrix[i,:])) - 1
+            # get the edge index for ij pairs
+            start_idx_ij = findIndex(i)
+            end_idx_ij = start_idx_ij + num_neighbors_i
 
-    
-        
-        for index,j in enumerate(neighbors_list[i]):
-            start_idx_ji = findIndex(j)
-            idx_ji = start_idx_ji + neighbors_list[j].index(i) # connection of ji
-            if i<j:
-                z[idx_ji] = (1/2)*z[idx_ji] + (1/2)*(z[start_idx_ij + index] + 2*c*(1*x_PDMM_median[i]))
+            neighbor_npList = np.array(neighbors_list[i])
+            A_ij = np.sign((neighbor_npList - i*np.ones(num_neighbors_i))).reshape(-1, 1).T
+            summed_factor_Az = A_ij@z[start_idx_ij : end_idx_ij]
+            if ((-1-summed_factor_Az)/(c*num_neighbors_i) > s[i]):
+                x_PDMM_median[i] = (-1 - (summed_factor_Az))/(c*num_neighbors_i)
+            elif ((1-summed_factor_Az)/(c*num_neighbors_i) < s[i]):
+                x_PDMM_median[i] = (1 - (summed_factor_Az))/(c*num_neighbors_i)
             else:
-                z[idx_ji] = (1/2)*z[idx_ji] + (1/2)*(z[start_idx_ij + index] + 2*c*(-1*x_PDMM_median[i]))
-
-        # sending xi to xj's?
-        for j in (neighbors_list[i]):
-            x_PDMM_median[j] = x_PDMM_median[i]
-                
-                
-        # for index,j in enumerate(neighbors_list[i]):
-        #     start_idx_ji = findIndex(j)
-        #     idx_ji = start_idx_ji + neighbors_list[j].index(i) # connection of ji    
-        #     if i<j:
-        #         z[idx_ji] = (1/2)*z[idx_ji] + (1/2)*(z[start_idx_ij + index] + 2*c*(1*x_PDMM_median[i]))
-        #     else:
-        #         z[idx_ji] = (1/2)*z[idx_ji] + (1/2)*(z[start_idx_ij + index] + 2*c*(-1*x_PDMM_median[i]))
-
-    x_list_PDMM_median.append(x_PDMM_median.copy())
+                x_PDMM_median[i] = s[i] # just the initial value
 
 
+            
+            for index,j in enumerate(neighbors_list[i]):
+                start_idx_ji = findIndex(j)
+                idx_ji = start_idx_ji + neighbors_list[j].index(i) # connection of ji
+                if i<j:
+                    z[idx_ji] = (1/2)*z[idx_ji] + (1/2)*(z[start_idx_ij + index] + 2*c*(1*x_PDMM_median[i]))
+                else:
+                    z[idx_ji] = (1/2)*z[idx_ji] + (1/2)*(z[start_idx_ij + index] + 2*c*(-1*x_PDMM_median[i]))
+                transmissions_PDMM_med += 1
+
+            # sending xi to xj's?
+            for j in (neighbors_list[i]):
+                x_PDMM_median[j] = x_PDMM_median[i]
+                transmissions_PDMM_med += 1
+                    
+                    
+            # for index,j in enumerate(neighbors_list[i]):
+            #     start_idx_ji = findIndex(j)
+            #     idx_ji = start_idx_ji + neighbors_list[j].index(i) # connection of ji    
+            #     if i<j:
+            #         z[idx_ji] = (1/2)*z[idx_ji] + (1/2)*(z[start_idx_ij + index] + 2*c*(1*x_PDMM_median[i]))
+            #     else:
+            #         z[idx_ji] = (1/2)*z[idx_ji] + (1/2)*(z[start_idx_ij + index] + 2*c*(-1*x_PDMM_median[i]))
+
+        x_list_PDMM_median.append(x_PDMM_median.copy())
+    else:
+        print('convergence reached')
+        break
 
 
 
 
+print('Transmissions of Randomized Gossip: ', transmissions_RG)
+print('Transmissions of PDMM Average:', transmissions_PDMM_avg)
+print('Transmissions of PDMM Median:', transmissions_PDMM_med)
 
 # x & y might not be needed tbh:
 x = np_locations[:,0]
@@ -581,7 +611,7 @@ plt.show()
 plt.figure(figsize=(10, 6))
 #plt.semilogy(errors_PDMM, label=f'PDMM (best $c$ = {c_vals[best_c_index_PDMM_avg]:.2f})', linewidth=2)
 plt.semilogy(errors_PDMM, label=f'PDMM (best $c$ = 0.4)', linewidth=2)
-# plt.semilogy(errors_PDMM_median, label=f'Median PDMM (best $c$ = {c_vals[best_c_index_PDMM_median]:.2f})', linewidth=2)
+plt.semilogy(errors_PDMM_median, label=f'Median PDMM (best $c$ = ?)', linewidth=2)
 plt.semilogy(errors_gossip, label='Randomized Gossip', linewidth=2, linestyle='--')
 
 plt.xlabel('Iteration $k$')
